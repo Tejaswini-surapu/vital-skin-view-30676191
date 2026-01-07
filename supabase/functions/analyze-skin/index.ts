@@ -1,0 +1,191 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const SKIN_DISEASES = [
+  "Acne Vulgaris",
+  "Eczema (Dermatitis)",
+  "Melanoma",
+  "Psoriasis",
+  "Ringworm (Fungal Infection)",
+  "Rosacea",
+  "Vitiligo",
+  "Warts",
+  "Lupus",
+  "Impetigo"
+];
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { imageBase64 } = await req.json();
+    
+    if (!imageBase64) {
+      return new Response(
+        JSON.stringify({ error: 'No image provided' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY is not configured');
+      return new Response(
+        JSON.stringify({ error: 'AI service not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Analyzing skin image with Gemini Vision...');
+
+    const systemPrompt = `You are a dermatology AI assistant for an educational skin disease detection system. 
+    
+Your task is to analyze skin images and classify them into one of these 10 categories:
+${SKIN_DISEASES.map((d, i) => `${i + 1}. ${d}`).join('\n')}
+
+IMPORTANT: This is for EDUCATIONAL purposes only. You must:
+1. Analyze the visual characteristics of the skin condition shown
+2. Classify it as one of the 10 diseases listed above
+3. Provide a confidence score between 60-98% (be realistic, never claim 100%)
+4. Explain your reasoning briefly
+
+If the image is not a skin condition or is unclear, still make your best educated guess from the list but with lower confidence.
+
+Respond ONLY in this exact JSON format:
+{
+  "disease": "Disease Name from the list",
+  "confidence": 85.5,
+  "reasoning": "Brief explanation of visual features that led to this classification",
+  "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"]
+}`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { 
+            role: 'user', 
+            content: [
+              {
+                type: 'text',
+                text: 'Please analyze this skin image and classify the condition. Provide your diagnosis in the exact JSON format specified.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageBase64
+                }
+              }
+            ]
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI Gateway error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ error: 'AI analysis failed' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const data = await response.json();
+    console.log('AI response received');
+    
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      console.error('No content in AI response');
+      return new Response(
+        JSON.stringify({ error: 'Invalid AI response' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Parse the JSON response from the AI
+    let result;
+    try {
+      // Extract JSON from the response (handles markdown code blocks)
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        result = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', content);
+      // Fallback response
+      result = {
+        disease: "Unable to classify",
+        confidence: 50,
+        reasoning: content,
+        recommendations: [
+          "Please consult a dermatologist for accurate diagnosis",
+          "Consider uploading a clearer image",
+          "Ensure good lighting when taking photos"
+        ]
+      };
+    }
+
+    // Validate and normalize the result
+    const validDisease = SKIN_DISEASES.find(d => 
+      d.toLowerCase() === result.disease?.toLowerCase() ||
+      d.toLowerCase().includes(result.disease?.toLowerCase()) ||
+      result.disease?.toLowerCase().includes(d.split(' ')[0].toLowerCase())
+    );
+    
+    const prediction = {
+      disease: validDisease || result.disease || "Unknown Condition",
+      confidence: Math.min(98, Math.max(50, Number(result.confidence) || 75)),
+      reasoning: result.reasoning || "Analysis completed",
+      recommendations: result.recommendations || [
+        "Consult a dermatologist for professional diagnosis",
+        "Do not self-medicate based on this prediction",
+        "Monitor for any changes in symptoms"
+      ]
+    };
+
+    console.log('Prediction result:', prediction.disease, prediction.confidence);
+
+    return new Response(JSON.stringify(prediction), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    console.error('Error in analyze-skin function:', error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Analysis failed' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
