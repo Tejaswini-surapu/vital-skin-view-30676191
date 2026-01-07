@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useEffect } from "react";
-import { CheckCircle2, AlertTriangle, RotateCcw, Home, TrendingUp, Info } from "lucide-react";
+import { CheckCircle2, AlertTriangle, RotateCcw, Home, TrendingUp, Info, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import Header from "@/components/Header";
@@ -13,6 +13,7 @@ interface ResultsState {
     disease: string;
     confidence: number;
     description: string;
+    reasoning?: string;
     recommendations: string[];
   };
   imagePreview: string;
@@ -37,14 +38,14 @@ const Results = () => {
   const diseaseInfo = getDiseaseInfo(prediction.disease);
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 90) return "text-success";
-    if (confidence >= 75) return "text-primary";
+    if (confidence >= 85) return "text-success";
+    if (confidence >= 70) return "text-primary";
     return "text-warning";
   };
 
   const getConfidenceLabel = (confidence: number) => {
-    if (confidence >= 90) return "High Confidence";
-    if (confidence >= 75) return "Moderate Confidence";
+    if (confidence >= 85) return "High Confidence";
+    if (confidence >= 70) return "Moderate Confidence";
     return "Low Confidence";
   };
 
@@ -89,7 +90,7 @@ const Results = () => {
                 {/* Prediction Section */}
                 <div className="p-6 md:p-8 flex flex-col justify-center">
                   <p className="text-xs text-muted-foreground mb-2 font-medium tracking-wider">
-                    PREDICTED CONDITION
+                    AI PREDICTED CONDITION
                   </p>
                   <h2 className="font-heading text-2xl md:text-3xl font-bold text-foreground mb-4">
                     {prediction.disease}
@@ -119,10 +120,23 @@ const Results = () => {
               </div>
             </div>
 
+            {/* AI Reasoning */}
+            {prediction.reasoning && (
+              <div className="bg-card rounded-xl shadow-card p-6 border border-border/50 mb-6">
+                <h3 className="font-heading font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-primary" />
+                  AI Analysis Reasoning
+                </h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  {prediction.reasoning}
+                </p>
+              </div>
+            )}
+
             {/* Additional Info */}
-            {diseaseInfo && (
-              <div className="grid md:grid-cols-2 gap-6 mb-6">
-                {/* Symptoms */}
+            <div className="grid md:grid-cols-2 gap-6 mb-6">
+              {/* Symptoms */}
+              {diseaseInfo && (
                 <div className="bg-card rounded-xl shadow-card p-6 border border-border/50">
                   <h3 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
                     <Info className="h-4 w-4 text-primary" />
@@ -136,24 +150,24 @@ const Results = () => {
                     ))}
                   </div>
                 </div>
+              )}
 
-                {/* Recommendations */}
-                <div className="bg-card rounded-xl shadow-card p-6 border border-border/50">
-                  <h3 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
-                    Recommendations
-                  </h3>
-                  <ul className="space-y-2">
-                    {prediction.recommendations.map((rec, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 flex-shrink-0" />
-                        {rec}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              {/* Recommendations */}
+              <div className="bg-card rounded-xl shadow-card p-6 border border-border/50">
+                <h3 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                  Recommendations
+                </h3>
+                <ul className="space-y-2">
+                  {prediction.recommendations.map((rec, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 flex-shrink-0" />
+                      {rec}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            )}
+            </div>
 
             {/* Important Notice */}
             <div className="bg-warning/5 border border-warning/20 rounded-xl p-4 mb-6">

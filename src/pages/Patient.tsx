@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Info } from "lucide-react";
+import { Camera, Info, Sparkles } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import MedicalDisclaimer from "@/components/MedicalDisclaimer";
 import ImageUploader from "@/components/ImageUploader";
-import { predictSkinDisease, PredictionResult } from "@/lib/skinDiseaseService";
+import { predictSkinDisease } from "@/lib/skinDiseaseService";
 
 const Patient = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleImageSelect = async (file: File, preview: string) => {
@@ -27,7 +29,28 @@ const Patient = () => {
       });
     } catch (error) {
       console.error("Prediction error:", error);
-      alert("An error occurred during analysis. Please try again.");
+      
+      const errorMessage = error instanceof Error ? error.message : "Analysis failed";
+      
+      if (errorMessage.includes('Rate limit')) {
+        toast({
+          variant: "destructive",
+          title: "Rate Limit Exceeded",
+          description: "Please wait a moment and try again.",
+        });
+      } else if (errorMessage.includes('credits')) {
+        toast({
+          variant: "destructive",
+          title: "AI Credits Exhausted",
+          description: "Please add credits to your workspace to continue.",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Analysis Failed",
+          description: errorMessage,
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -68,8 +91,14 @@ const Patient = () => {
                 isLoading={isLoading}
               />
 
+              {/* AI Badge */}
+              <div className="mt-6 flex items-center justify-center gap-2 text-sm text-primary">
+                <Sparkles className="h-4 w-4" />
+                <span className="font-medium">Powered by Gemini Vision AI</span>
+              </div>
+
               {/* Tips */}
-              <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
+              <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border">
                 <h3 className="font-medium text-foreground flex items-center gap-2 mb-3">
                   <Info className="h-4 w-4 text-primary" />
                   Tips for Best Results

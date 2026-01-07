@@ -1,11 +1,13 @@
 // Skin Disease Detection Service
-// This is a mock prediction service that simulates the AI model behavior
-// In production, this would connect to a Python/Flask backend with actual DenseNet-121 model
+// Uses Lovable AI (Gemini Vision) for real image analysis
+
+import { supabase } from "@/integrations/supabase/client";
 
 export interface PredictionResult {
   disease: string;
   confidence: number;
   description: string;
+  reasoning?: string;
   recommendations: string[];
 }
 
@@ -79,25 +81,54 @@ export const SKIN_DISEASES: DiseaseInfo[] = [
   }
 ];
 
-// Simulates image processing and prediction
-// In real implementation, this would send the image to a Python backend
-export const predictSkinDisease = async (imageFile: File): Promise<PredictionResult> => {
-  // Simulate processing time (mimics actual model inference)
-  await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1500));
+// Disease descriptions for AI results
+const diseaseDescriptions: Record<string, string> = {
+  "Acne Vulgaris": "A common skin condition that occurs when hair follicles become clogged with oil and dead skin cells.",
+  "Eczema (Dermatitis)": "A condition that causes the skin to become inflamed, itchy, cracked, and rough.",
+  "Melanoma": "The most serious type of skin cancer, developing in the cells that give skin its color.",
+  "Psoriasis": "A chronic autoimmune condition that causes rapid buildup of skin cells, leading to scaling.",
+  "Ringworm (Fungal Infection)": "A fungal infection that causes a ring-shaped, red, itchy rash on the skin.",
+  "Rosacea": "A chronic skin condition causing redness and visible blood vessels on the face.",
+  "Vitiligo": "A condition where the skin loses its pigment cells, resulting in white patches.",
+  "Warts": "Small, grainy skin growths caused by the human papillomavirus (HPV).",
+  "Lupus": "An autoimmune disease that can cause skin manifestations including the characteristic butterfly rash.",
+  "Impetigo": "A highly contagious bacterial skin infection characterized by red sores."
+};
 
-  // Generate a simulated prediction based on image characteristics
-  // In production, this would be replaced with actual model inference
-  const randomIndex = Math.floor(Math.random() * SKIN_DISEASES.length);
-  const selectedDisease = SKIN_DISEASES[randomIndex];
-  
-  // Generate confidence score between 75-98% for realistic demo
-  const confidence = 75 + Math.random() * 23;
+// Real AI-powered prediction using Gemini Vision
+export const predictSkinDisease = async (imageFile: File): Promise<PredictionResult> => {
+  // Convert image to base64
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(imageFile);
+  });
+
+  // Call the edge function
+  const { data, error } = await supabase.functions.invoke('analyze-skin', {
+    body: { imageBase64: base64 }
+  });
+
+  if (error) {
+    console.error('Edge function error:', error);
+    throw new Error(error.message || 'Failed to analyze image');
+  }
+
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  // Get description for the predicted disease
+  const description = diseaseDescriptions[data.disease] || 
+    `Analysis indicates possible ${data.disease}. Please consult a dermatologist for accurate diagnosis.`;
 
   return {
-    disease: selectedDisease.name,
-    confidence: Math.round(confidence * 100) / 100,
-    description: selectedDisease.description,
-    recommendations: [
+    disease: data.disease,
+    confidence: data.confidence,
+    description: description,
+    reasoning: data.reasoning,
+    recommendations: data.recommendations || [
       "Consult a dermatologist for professional diagnosis",
       "Do not self-medicate based on this prediction",
       "Keep the affected area clean and protected",
@@ -107,5 +138,9 @@ export const predictSkinDisease = async (imageFile: File): Promise<PredictionRes
 };
 
 export const getDiseaseInfo = (diseaseName: string): DiseaseInfo | undefined => {
-  return SKIN_DISEASES.find(d => d.name === diseaseName);
+  return SKIN_DISEASES.find(d => 
+    d.name.toLowerCase() === diseaseName.toLowerCase() ||
+    d.name.toLowerCase().includes(diseaseName.toLowerCase()) ||
+    diseaseName.toLowerCase().includes(d.name.split(' ')[0].toLowerCase())
+  );
 };
