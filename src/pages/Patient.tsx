@@ -7,19 +7,68 @@ import Footer from "@/components/Footer";
 import MedicalDisclaimer from "@/components/MedicalDisclaimer";
 import ImageUploader from "@/components/ImageUploader";
 import { predictSkinDisease } from "@/lib/skinDiseaseService";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
 
 const Patient = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [patientName, setPatientName] = useState("");
+  const [patientAge, setPatientAge] = useState("");
+  const [daysSuffering, setDaysSuffering] = useState("");
 
   const handleImageSelect = async (file: File, preview: string) => {
+    if (!patientName.trim() || !patientAge || !daysSuffering) {
+      toast({
+        variant: "destructive",
+        title: "Missing Details",
+        description: "Please fill in your name, age, and days suffering before analyzing.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     
     try {
       const result = await predictSkinDisease(file);
-      
-      // Navigate to results page with state
+
+      // Upload image to storage
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${crypto.randomUUID()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('skin-images')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw new Error('Failed to upload image');
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('skin-images')
+        .getPublicUrl(filePath);
+
+      // Save submission to database
+      const { error: insertError } = await supabase
+        .from('patient_submissions')
+        .insert({
+          patient_name: patientName.trim(),
+          patient_age: parseInt(patientAge),
+          days_suffering: parseInt(daysSuffering),
+          image_url: urlData.publicUrl,
+          predicted_disease: result.disease,
+          confidence: result.confidence,
+          description: result.description,
+          reasoning: result.reasoning || null,
+          recommendations: result.recommendations,
+        });
+
+      if (insertError) {
+        console.error('Insert error:', insertError);
+      }
+
       navigate("/results", {
         state: {
           prediction: result,
@@ -71,17 +120,64 @@ const Patient = () => {
               Patient Portal
             </h1>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              Upload a clear image of the affected skin area for AI-powered analysis. 
-              Ensure good lighting and focus for best results.
+              Fill in your details and upload a clear image of the affected skin area for AI-powered analysis.
             </p>
           </div>
 
-          {/* Upload Section */}
           <div className="max-w-2xl mx-auto">
-            <div className="bg-card rounded-2xl shadow-card p-6 md:p-8 border border-border/50">
+            {/* Patient Details */}
+            <div className="bg-card rounded-2xl shadow-card p-6 md:p-8 border border-border/50 mb-6">
               <h2 className="font-heading text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
                 <span className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
                   1
+                </span>
+                Patient Details
+              </h2>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="Enter your name"
+                    value={patientName}
+                    onChange={(e) => setPatientName(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="age">Age</Label>
+                  <Input
+                    id="age"
+                    type="number"
+                    placeholder="e.g. 25"
+                    min="1"
+                    max="150"
+                    value={patientAge}
+                    onChange={(e) => setPatientAge(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="days">Days Suffering</Label>
+                  <Input
+                    id="days"
+                    type="number"
+                    placeholder="e.g. 7"
+                    min="0"
+                    value={daysSuffering}
+                    onChange={(e) => setDaysSuffering(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Upload Section */}
+            <div className="bg-card rounded-2xl shadow-card p-6 md:p-8 border border-border/50">
+              <h2 className="font-heading text-xl font-semibold text-foreground mb-6 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                  2
                 </span>
                 Upload Skin Image
               </h2>
