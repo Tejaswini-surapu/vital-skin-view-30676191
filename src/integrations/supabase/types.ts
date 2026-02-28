@@ -16,43 +16,61 @@ export type Database = {
     Tables: {
       patient_submissions: {
         Row: {
+          address: string | null
+          cause: string | null
           confidence: number
           created_at: string
           days_suffering: number
           description: string | null
+          entered_by: string | null
           id: string
           image_url: string
+          mobile_number: string | null
+          model_results: Json | null
           patient_age: number
           patient_name: string
           predicted_disease: string
           reasoning: string | null
           recommendations: string[] | null
+          token_number: string | null
         }
         Insert: {
+          address?: string | null
+          cause?: string | null
           confidence: number
           created_at?: string
           days_suffering: number
           description?: string | null
+          entered_by?: string | null
           id?: string
           image_url: string
+          mobile_number?: string | null
+          model_results?: Json | null
           patient_age: number
           patient_name: string
           predicted_disease: string
           reasoning?: string | null
           recommendations?: string[] | null
+          token_number?: string | null
         }
         Update: {
+          address?: string | null
+          cause?: string | null
           confidence?: number
           created_at?: string
           days_suffering?: number
           description?: string | null
+          entered_by?: string | null
           id?: string
           image_url?: string
+          mobile_number?: string | null
+          model_results?: Json | null
           patient_age?: number
           patient_name?: string
           predicted_disease?: string
           reasoning?: string | null
           recommendations?: string[] | null
+          token_number?: string | null
         }
         Relationships: []
       }
