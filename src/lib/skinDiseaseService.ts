@@ -1,7 +1,16 @@
 // Skin Disease Detection Service
-// Uses Lovable AI (Gemini Vision) for real image analysis
+// Uses Lovable AI (Gemini Vision) for real image analysis with multi-model comparison
 
 import { supabase } from "@/integrations/supabase/client";
+
+export interface ModelResult {
+  modelName: string;
+  modelDescription: string;
+  disease: string;
+  confidence: number;
+  reasoning: string;
+  recommendations: string[];
+}
 
 export interface PredictionResult {
   disease: string;
@@ -9,6 +18,7 @@ export interface PredictionResult {
   description: string;
   reasoning?: string;
   recommendations: string[];
+  modelResults?: ModelResult[];
 }
 
 export interface DiseaseInfo {
@@ -81,7 +91,6 @@ export const SKIN_DISEASES: DiseaseInfo[] = [
   }
 ];
 
-// Disease descriptions for AI results
 const diseaseDescriptions: Record<string, string> = {
   "Acne Vulgaris": "A common skin condition that occurs when hair follicles become clogged with oil and dead skin cells.",
   "Eczema (Dermatitis)": "A condition that causes the skin to become inflamed, itchy, cracked, and rough.",
@@ -95,9 +104,7 @@ const diseaseDescriptions: Record<string, string> = {
   "Impetigo": "A highly contagious bacterial skin infection characterized by red sores."
 };
 
-// Real AI-powered prediction using Gemini Vision
 export const predictSkinDisease = async (imageFile: File): Promise<PredictionResult> => {
-  // Convert image to base64
   const base64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => resolve(reader.result as string);
@@ -105,7 +112,6 @@ export const predictSkinDisease = async (imageFile: File): Promise<PredictionRes
     reader.readAsDataURL(imageFile);
   });
 
-  // Call the edge function
   const { data, error } = await supabase.functions.invoke('analyze-skin', {
     body: { imageBase64: base64 }
   });
@@ -119,7 +125,6 @@ export const predictSkinDisease = async (imageFile: File): Promise<PredictionRes
     throw new Error(data.error);
   }
 
-  // Get description for the predicted disease
   const description = diseaseDescriptions[data.disease] || 
     `Analysis indicates possible ${data.disease}. Please consult a dermatologist for accurate diagnosis.`;
 
@@ -133,7 +138,8 @@ export const predictSkinDisease = async (imageFile: File): Promise<PredictionRes
       "Do not self-medicate based on this prediction",
       "Keep the affected area clean and protected",
       "Monitor for any changes in symptoms"
-    ]
+    ],
+    modelResults: data.modelResults || [],
   };
 };
 
