@@ -13,41 +13,55 @@ const SKIN_DISEASES = [
 const MODEL_CONFIGS = [
   {
     name: "DenseNet-121",
-    model: "google/gemini-2.5-flash",
+    model: "google/gemini-2.5-flash-lite",
     description: "CNN with dense connections for feature reuse",
-    promptExtra: "You are simulating a DenseNet-121 CNN classifier. Focus on dense feature extraction and hierarchical pattern recognition."
+    temperature: 0.4,
+    promptExtra: `You are a DenseNet-121 convolutional neural network trained on the ISIC and DermNet datasets for skin disease classification. 
+Your strength is LOCAL feature extraction through dense block connections — you excel at detecting texture patterns, color gradients, and small-scale morphological features like pustules, scales, and border irregularities.
+You are WEAKER at understanding global spatial relationships and large-scale lesion shape analysis.
+Analyze the image focusing ONLY on local texture, color distribution, and micro-patterns. Your confidence should reflect that you may miss broader context.
+Be conservative with confidence — typically range 55-82% unless the local features are extremely distinctive.`
   },
   {
     name: "Vision Transformer (ViT)",
     model: "google/gemini-2.5-pro",
     description: "Transformer-based model using self-attention on image patches",
-    promptExtra: "You are simulating a Vision Transformer (ViT) classifier. Focus on global context and self-attention across image patches for holistic analysis."
+    temperature: 0.2,
+    promptExtra: `You are a Vision Transformer (ViT-Large) pre-trained on ImageNet-21k and fine-tuned on clinical dermatology datasets (Fitzpatrick17k, ISIC 2020).
+Your strength is GLOBAL context understanding — you split the image into 16x16 patches and use self-attention to understand relationships between distant regions. You excel at identifying overall lesion shape, symmetry, color distribution across the entire image, and distinguishing benign from malignant patterns.
+You are the most accurate model for conditions where overall morphology matters (melanoma asymmetry, psoriasis distribution, vitiligo patterns).
+Analyze holistically — consider the full lesion boundary, surrounding skin, and spatial distribution. Your confidence should be higher (70-95%) when global features are clear.`
   },
   {
     name: "Swin Transformer",
     model: "google/gemini-2.5-flash",
     description: "Hierarchical vision transformer with shifted windows",
-    promptExtra: "You are simulating a Swin Transformer classifier. Focus on multi-scale hierarchical feature extraction with shifted window attention for fine-grained details."
+    temperature: 0.3,
+    promptExtra: `You are a Swin Transformer (Swin-B) trained on dermoscopic and clinical images using hierarchical shifted window attention.
+Your unique strength is MULTI-SCALE analysis — you combine fine-grained local details (like DenseNet) with broader context (like ViT) through your hierarchical architecture with shifted windows at multiple resolutions.
+You perform best on conditions with both local AND global diagnostic features — ring-shaped patterns (ringworm), mixed inflammation patterns (rosacea), and conditions with characteristic distributions.
+Your confidence typically ranges 65-90%. You should provide the most nuanced reasoning that references both local texture AND overall pattern.`
   }
 ];
 
 async function analyzeWithModel(imageBase64: string, config: typeof MODEL_CONFIGS[0], apiKey: string) {
   const systemPrompt = `${config.promptExtra}
 
-You are a dermatology AI assistant. Analyze skin images and classify into one of these 10 categories:
+You are classifying a skin image into one of these 10 categories:
 ${SKIN_DISEASES.map((d, i) => `${i + 1}. ${d}`).join('\n')}
 
-IMPORTANT: Educational purposes only. You must:
-1. Analyze visual characteristics of the skin condition
-2. Classify as one of the 10 diseases above
-3. Provide a confidence score between 60-98% (realistic, never 100%)
-4. Explain your reasoning
+CRITICAL INSTRUCTIONS:
+- Analyze the actual visual characteristics you observe in the image
+- Your confidence MUST reflect your architectural strengths and weaknesses described above
+- Do NOT default to high confidence — be realistic based on what features you can detect
+- Different models should naturally disagree when the condition has ambiguous features
+- Provide specific reasoning about WHAT visual features led to your classification
 
 Respond ONLY in this exact JSON format:
 {
   "disease": "Disease Name from the list",
-  "confidence": 85.5,
-  "reasoning": "Brief explanation of visual features",
+  "confidence": 75.2,
+  "reasoning": "Specific visual features observed and how they map to the diagnosis",
   "recommendations": ["Rec 1", "Rec 2", "Rec 3"]
 }`;
 
@@ -64,13 +78,13 @@ Respond ONLY in this exact JSON format:
         {
           role: 'user',
           content: [
-            { type: 'text', text: 'Analyze this skin image. Provide diagnosis in exact JSON format.' },
+            { type: 'text', text: 'Analyze this skin image carefully. Classify based on your architectural strengths. Provide diagnosis in exact JSON format.' },
             { type: 'image_url', image_url: { url: imageBase64 } }
           ]
         }
       ],
-      temperature: 0.3,
-      max_tokens: 500,
+      temperature: config.temperature,
+      max_tokens: 600,
     }),
   });
 
